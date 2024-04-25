@@ -94,16 +94,6 @@ static BTN_StatusTypeDef btn_status = BTN_PRESSED;
 int btn_index = -1;
 int btn_count = 0;
 
-EmbeddedCliConfig *cli_config = NULL;
-EmbeddedCli *cli = NULL;
-
-static char chan[4][10] = {
-	{'0','0','0','0','0','0','0','0','0','\0'},
-	{'0','0','0','0','0','0','0','0','0','\0'},
-	{'0','0','0','0','0','0','0','0','0','\0'},
-	{'0','0','0','0','0','0','0','0','0','\0'},
-};
-
 static bool on_status = false;
 /* USER CODE END PV */
 
@@ -124,11 +114,6 @@ extern void StartProfileTask(void const * argument);
 /*
  * Write char to uart in blocking mode
  */
-static void cli_writeChar(EmbeddedCli *embeddedCli, char c)
-{
-	uint8_t chr = c;
-	HAL_UART_Transmit(&huart2, &chr, 1, HAL_MAX_DELAY);
-}
 
 static void UART2_write(const char * str)
 {
@@ -207,7 +192,7 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of uxTask */
-  osThreadDef(uxTask, StartUxTask, osPriorityNormal, 0, 512);
+  osThreadDef(uxTask, StartUxTask, osPriorityNormal, 0, 256);
   uxTaskHandle = osThreadCreate(osThread(uxTask), NULL);
 
   /* definition and creation of profileTask */
@@ -659,31 +644,10 @@ static int BTN_SingleKeyDown()
 	return -1;
 }
 
-static void CLI_CMD_Foo(EmbeddedCli *cli, char *args, void *context)
+int detect_single_keydown(void)
 {
-	HAL_UART_Transmit(&huart2, (uint8_t*)"bar\r\n", 5, HAL_MAX_DELAY);
+	return BTN_SingleKeyDown();
 }
-
-CliCommandBinding cli_cmd_foo_binding = {
-		"foo",
-		"Print bar (for test purpose only)",
-		false,
-		NULL,
-		CLI_CMD_Foo
-};
-
-/**
-static bool chan_is_empty()
-{
-	for (int i = 0; i < 4; i++)
-	{
-		if (strcmp(chan[i], "000000000") != 0)
-		{
-			return false;
-		}
-	}
-	return true;
-} */
 
 static void unset_chan()
 {
@@ -727,121 +691,6 @@ static void unset_chan()
 	SET_CHAN(0, D8);
 	SET_CHAN(0, D9);
 }
-
-static void print_chan()
-{
-	UART2_write("a: ");
-	UART2_write(&chan[0][0]);
-	UART2_write("\r\n");
-	UART2_write("b: ");
-	UART2_write(&chan[1][0]);
-	UART2_write("\r\n");
-	UART2_write("c: ");
-	UART2_write(&chan[2][0]);
-	UART2_write("\r\n");
-	UART2_write("d: ");
-	UART2_write(&chan[3][0]);
-	UART2_write("\r\n");
-}
-
-static void CLI_CMD_Set(EmbeddedCli *cli, char *args, void *context)
-{
-	size_t len;
-
-	for (int i = 0; i < 4; i++)
-	{
-		const char * arg = embeddedCliGetToken(args, i + 1);
-		len = strlen(arg);
-
-		if (i == 0 && len == 0)
-		{
-			print_chan();
-			return;
-		}
-
-		if (len != 9)
-		{
-			goto bad;
-		}
-
-		for (int j = 0; j < 9; j++)
-		{
-			if (arg[j] != '0' && arg[j] != '1' && arg[j] != '2')
-			{
-				goto bad;
-			}
-		}
-	}
-
-	for (int i = 0; i < 4; i++)
-	{
-		const char * arg = embeddedCliGetToken(args, i + 1);
-		memcpy(&chan[i][0], arg, 9);
-	}
-
-	print_chan();
-	return;
-bad:
-	UART2_write("error: wrong length or format in one or more arguments\r\n");
-}
-
-CliCommandBinding cli_cmd_set_binding = {
-		"set",
-		"Set switch config. Example: set 222222222 000000000 111111111 000000000 (2 for signal, 1 for common, 0 for float)",
-		true,
-		NULL,
-		CLI_CMD_Set
-};
-
-/*
-static void CLI_CMD_On(EmbeddedCli *cli, char *args, void *context)
-{
-	if (chan_is_empty())
-	{
-		UART2_write("Switch config is empty.");
-		return;
-	}
-
-	SET_CHAN(chan[0][0], A1);
-	SET_CHAN(chan[0][1], A2);
-	SET_CHAN(chan[0][2], A3);
-	SET_CHAN(chan[0][3], A4);
-	SET_CHAN(chan[0][4], A5);
-	SET_CHAN(chan[0][5], A6);
-	SET_CHAN(chan[0][6], A7);
-	SET_CHAN(chan[0][7], A8);
-	SET_CHAN(chan[0][8], A9);
-
-	SET_CHAN(chan[1][0], B1);
-	SET_CHAN(chan[1][1], B2);
-	SET_CHAN(chan[1][2], B3);
-	SET_CHAN(chan[1][3], B4);
-	SET_CHAN(chan[1][4], B5);
-	SET_CHAN(chan[1][5], B6);
-	SET_CHAN(chan[1][6], B7);
-	SET_CHAN(chan[1][7], B8);
-	SET_CHAN(chan[1][8], B9);
-
-	SET_CHAN(chan[2][0], C1);
-	SET_CHAN(chan[2][1], C2);
-	SET_CHAN(chan[2][2], C3);
-	SET_CHAN(chan[2][3], C4);
-	SET_CHAN(chan[2][4], C5);
-	SET_CHAN(chan[2][5], C6);
-	SET_CHAN(chan[2][6], C7);
-	SET_CHAN(chan[2][7], C8);
-	SET_CHAN(chan[2][8], C9);
-
-	SET_CHAN(chan[3][0], D1);
-	SET_CHAN(chan[3][1], D2);
-	SET_CHAN(chan[3][2], D3);
-	SET_CHAN(chan[3][3], D4);
-	SET_CHAN(chan[3][4], D5);
-	SET_CHAN(chan[3][5], D6);
-	SET_CHAN(chan[3][6], D7);
-	SET_CHAN(chan[3][7], D8);
-	SET_CHAN(chan[3][8], D9);
-} */
 
 static void blink_delay(void)
 {
@@ -979,13 +828,13 @@ static void CLI_CMD_Blink(EmbeddedCli *cli, char *args, void *context)
 	SET_CHAN('0', D9); blink_delay();
 }
 
-CliCommandBinding cli_cmd_blink_binding = {
-		"blink",
-		"Switch on/off all ports (without simultaneous signal/common on, for test only)",
-		false,
-		NULL,
-		CLI_CMD_Blink
-};
+//CliCommandBinding cli_cmd_blink_binding = {
+//		"blink",
+//		"Switch on/off all ports (without simultaneous signal/common on, for test only)",
+//		false,
+//		NULL,
+//		CLI_CMD_Blink
+//};
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartUxTask */
@@ -995,20 +844,18 @@ CliCommandBinding cli_cmd_blink_binding = {
   * @retval None
   */
 /* USER CODE END Header_StartUxTask */
-void StartUxTask(void const * argument)
+__weak void StartUxTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
+  /*
   cli_config = embeddedCliDefaultConfig();
   cli = embeddedCliNew(cli_config);
   cli -> writeChar = cli_writeChar;
 
-  embeddedCliAddBinding(cli, cli_cmd_foo_binding);
-  embeddedCliAddBinding(cli, cli_cmd_set_binding);
   embeddedCliAddBinding(cli, cli_cmd_blink_binding);
   embeddedCliAddBinding(cli, cli_cmd_list_binding);
   embeddedCliAddBinding(cli, cli_cmd_define_binding);
 
-  /* Infinite loop */
   for(;;)
   {
 	uint8_t c;
@@ -1032,7 +879,7 @@ void StartUxTask(void const * argument)
 
 	// wait 10ms
 	vTaskDelay(10);
-  }
+  } */
   /* USER CODE END 5 */
 }
 

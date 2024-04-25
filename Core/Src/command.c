@@ -14,6 +14,7 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 
+#include "cmsis_os.h"
 #include "command.h"
 #include "main.h"
 
@@ -27,11 +28,22 @@
 /* Private variables ---------------------------------------------------------*/
 static char long_buf[256];
 
+EmbeddedCliConfig *cli_config = NULL;
+EmbeddedCli *cli = NULL;
+
+extern UART_HandleTypeDef huart2;
+
 /* Private function prototypes -----------------------------------------------*/
+static void cli_writeChar(EmbeddedCli *embeddedCli, char c);
 static void CLI_CMD_List(EmbeddedCli *cli, char *args, void *context);
 static void CLI_CMD_Define(EmbeddedCli *cli, char *args, void *context);
 
 /* Private user code ---------------------------------------------------------*/
+static void cli_writeChar(EmbeddedCli *embeddedCli, char c)
+{
+	uint8_t chr = c;
+	HAL_UART_Transmit(&huart2, &chr, 1, HAL_MAX_DELAY);
+}
 
 static void CLI_CMD_List(EmbeddedCli *cli, char *args, void *context)
 {
@@ -187,6 +199,58 @@ CliCommandBinding cli_cmd_define_binding = {
 		NULL,
 		CLI_CMD_Define
 };
+
+static void CLI_CMD_Blink(EmbeddedCli *cli, char *args, void *context)
+{
+
+}
+
+CliCommandBinding cli_cmd_blink_binding = {
+		"blink",
+		"Blink all leds (for test purpose only).",
+		false,
+		NULL,
+		CLI_CMD_Blink
+};
+
+void StartUxTask(void const * argument)
+{
+  /* USER CODE BEGIN 5 */
+  cli_config = embeddedCliDefaultConfig();
+  cli = embeddedCliNew(cli_config);
+  cli -> writeChar = cli_writeChar;
+
+  embeddedCliAddBinding(cli, cli_cmd_blink_binding);
+  embeddedCliAddBinding(cli, cli_cmd_list_binding);
+  embeddedCliAddBinding(cli, cli_cmd_define_binding);
+
+  /* Infinite loop */
+  for(;;)
+  {
+	uint8_t c;
+	HAL_StatusTypeDef status = HAL_UART_Receive(&huart2, &c, 1, 10);
+	if (status == HAL_OK)
+	{
+	  embeddedCliReceiveChar(cli, c);
+	  embeddedCliProcess(cli);
+	}
+
+	int key = detect_single_keydown();
+	if (key >= 0)
+	{
+		const uint8_t digit[] = "0123456789";
+		HAL_UART_Transmit(&huart2, (uint8_t*)"key:", 4, 10);
+		HAL_UART_Transmit(&huart2, &digit[key], 1, 10);
+		HAL_UART_Transmit(&huart2, (uint8_t*)"\r\n", 2, 10);
+
+		do_profile_by_key(key);
+	}
+
+	// wait 10ms
+	vTaskDelay(10);
+  }
+  /* USER CODE END 5 */
+}
 
 
 

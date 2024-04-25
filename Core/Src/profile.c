@@ -275,6 +275,156 @@ entry_point:
 			goto entry_point;
 		}
 	}
+
+blink:
+	for (int port = 0; port < 4; port++)
+	{
+		for (int pin = 0; pin < 9; pin++)
+		{
+			update_switch(port, pin, GPIO_PIN_RESET, GPIO_PIN_RESET);
+		}
+	}
+
+	for (int port = 0; port < 4; port++)
+	{
+		for (int pin = 0; pin < 9; pin++)
+		{
+			update_switch(port, pin, GPIO_PIN_RESET, GPIO_PIN_SET);
+			vTaskDelay(100);
+		}
+	}
+
+	for (int port = 0; port < 4; port++)
+	{
+		for (int pin = 0; pin < 9; pin++)
+		{
+			update_switch(port, pin, GPIO_PIN_SET, GPIO_PIN_RESET);
+			vTaskDelay(100);
+		}
+	}
+
+	for (int port = 0; port < 4; port++)
+	{
+		for (int pin = 0; pin < 9; pin++)
+		{
+			update_switch(port, pin, GPIO_PIN_RESET, GPIO_PIN_RESET);
+			vTaskDelay(100);
+		}
+	}
+
+/*
+
+
+	SET_CHAN('2', B1); blink_delay();
+	SET_CHAN('2', B2); blink_delay();
+	SET_CHAN('2', B3); blink_delay();
+	SET_CHAN('2', B4); blink_delay();
+	SET_CHAN('2', B5); blink_delay();
+	SET_CHAN('2', B6); blink_delay();
+	SET_CHAN('2', B7); blink_delay();
+	SET_CHAN('2', B8); blink_delay();
+	SET_CHAN('2', B9); blink_delay();
+
+	SET_CHAN('2', C1); blink_delay();
+	SET_CHAN('2', C2); blink_delay();
+	SET_CHAN('2', C3); blink_delay();
+	SET_CHAN('2', C4); blink_delay();
+	SET_CHAN('2', C5); blink_delay();
+	SET_CHAN('2', C6); blink_delay();
+	SET_CHAN('2', C7); blink_delay();
+	SET_CHAN('2', C8); blink_delay();
+	SET_CHAN('2', C9); blink_delay();
+
+	SET_CHAN('2', D1); blink_delay();
+	SET_CHAN('2', D2); blink_delay();
+	SET_CHAN('2', D3); blink_delay();
+	SET_CHAN('2', D4); blink_delay();
+	SET_CHAN('2', D5); blink_delay();
+	SET_CHAN('2', D6); blink_delay();
+	SET_CHAN('2', D7); blink_delay();
+	SET_CHAN('2', D8); blink_delay();
+	SET_CHAN('2', D9); blink_delay();
+
+	SET_CHAN('1', A1); blink_delay();
+	SET_CHAN('1', A2); blink_delay();
+	SET_CHAN('1', A3); blink_delay();
+	SET_CHAN('1', A4); blink_delay();
+	SET_CHAN('1', A5); blink_delay();
+	SET_CHAN('1', A6); blink_delay();
+	SET_CHAN('1', A7); blink_delay();
+	SET_CHAN('1', A8); blink_delay();
+	SET_CHAN('1', A9); blink_delay();
+
+	SET_CHAN('1', B1); blink_delay();
+	SET_CHAN('1', B2); blink_delay();
+	SET_CHAN('1', B3); blink_delay();
+	SET_CHAN('1', B4); blink_delay();
+	SET_CHAN('1', B5); blink_delay();
+	SET_CHAN('1', B6); blink_delay();
+	SET_CHAN('1', B7); blink_delay();
+	SET_CHAN('1', B8); blink_delay();
+	SET_CHAN('1', B9); blink_delay();
+
+	SET_CHAN('1', C1); blink_delay();
+	SET_CHAN('1', C2); blink_delay();
+	SET_CHAN('1', C3); blink_delay();
+	SET_CHAN('1', C4); blink_delay();
+	SET_CHAN('1', C5); blink_delay();
+	SET_CHAN('1', C6); blink_delay();
+	SET_CHAN('1', C7); blink_delay();
+	SET_CHAN('1', C8); blink_delay();
+	SET_CHAN('1', C9); blink_delay();
+
+	SET_CHAN('1', D1); blink_delay();
+	SET_CHAN('1', D2); blink_delay();
+	SET_CHAN('1', D3); blink_delay();
+	SET_CHAN('1', D4); blink_delay();
+	SET_CHAN('1', D5); blink_delay();
+	SET_CHAN('1', D6); blink_delay();
+	SET_CHAN('1', D7); blink_delay();
+	SET_CHAN('1', D8); blink_delay();
+	SET_CHAN('1', D9); blink_delay();
+
+	SET_CHAN('0', A1); blink_delay();
+	SET_CHAN('0', A2); blink_delay();
+	SET_CHAN('0', A3); blink_delay();
+	SET_CHAN('0', A4); blink_delay();
+	SET_CHAN('0', A5); blink_delay();
+	SET_CHAN('0', A6); blink_delay();
+	SET_CHAN('0', A7); blink_delay();
+	SET_CHAN('0', A8); blink_delay();
+	SET_CHAN('0', A9); blink_delay();
+
+	SET_CHAN('0', B1); blink_delay();
+	SET_CHAN('0', B2); blink_delay();
+	SET_CHAN('0', B3); blink_delay();
+	SET_CHAN('0', B4); blink_delay();
+	SET_CHAN('0', B5); blink_delay();
+	SET_CHAN('0', B6); blink_delay();
+	SET_CHAN('0', B7); blink_delay();
+	SET_CHAN('0', B8); blink_delay();
+	SET_CHAN('0', B9); blink_delay();
+
+	SET_CHAN('0', C1); blink_delay();
+	SET_CHAN('0', C2); blink_delay();
+	SET_CHAN('0', C3); blink_delay();
+	SET_CHAN('0', C4); blink_delay();
+	SET_CHAN('0', C5); blink_delay();
+	SET_CHAN('0', C6); blink_delay();
+	SET_CHAN('0', C7); blink_delay();
+	SET_CHAN('0', C8); blink_delay();
+	SET_CHAN('0', C9); blink_delay();
+
+	SET_CHAN('0', D1); blink_delay();
+	SET_CHAN('0', D2); blink_delay();
+	SET_CHAN('0', D3); blink_delay();
+	SET_CHAN('0', D4); blink_delay();
+	SET_CHAN('0', D5); blink_delay();
+	SET_CHAN('0', D6); blink_delay();
+	SET_CHAN('0', D7); blink_delay();
+	SET_CHAN('0', D8); blink_delay();
+	SET_CHAN('0', D9); blink_delay();
+ * */
 }
 
 // page size 2KB, table 29 flash memory characteristics, in datasheet (stm32f103ze.pdf)
