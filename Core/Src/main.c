@@ -20,6 +20,8 @@
  * TODO https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
  * https://deepbluembedded.com/how-to-receive-uart-serial-data-with-stm32-dma-interrupt-polling/
  */
+#include <profile.h>
+#include <string.h>
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -27,8 +29,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#define EMBEDDED_CLI_IMPL
-#include "embedded_cli.h"
+#include "command.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -39,6 +40,9 @@ typedef enum
 	BTN_DEBOUNCING,
 	BTN_PRESSED,	// waiting for release
 } BTN_StatusTypeDef;
+
+
+
 
 /* USER CODE END PTD */
 
@@ -73,14 +77,18 @@ typedef enum
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+CRC_HandleTypeDef hcrc;
+
 UART_HandleTypeDef huart2;
 DMA_HandleTypeDef hdma_usart2_rx;
 
-osThreadId defaultTaskHandle;
+osThreadId uxTaskHandle;
+osThreadId profileTaskHandle;
+osMessageQId requestQueueHandle;
 /* USER CODE BEGIN PV */
 
 uint8_t UART2_rxbuf[12] = {0};
-const uint8_t hello[] = "hello\r\n";
+const uint8_t hello[] = "\r\nhello\r\n> ";
 
 static BTN_StatusTypeDef btn_status = BTN_PRESSED;
 int btn_index = -1;
@@ -97,7 +105,6 @@ static char chan[4][10] = {
 };
 
 static bool on_status = false;
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -105,14 +112,15 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
-void StartDefaultTask(void const * argument);
+static void MX_CRC_Init(void);
+void StartUxTask(void const * argument);
+extern void StartProfileTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
 /*
  * Write char to uart in blocking mode
  */
@@ -133,6 +141,12 @@ static void UART2_write(const char * str)
 	HAL_UART_Transmit(&huart2, (const uint8_t *)str, len, HAL_MAX_DELAY);
 }
 
+void print_line(const char *str)
+{
+	UART2_write(str);
+	UART2_write("\r\n");
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -141,6 +155,7 @@ static void UART2_write(const char * str)
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -165,6 +180,7 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_USART2_UART_Init();
+  MX_CRC_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Transmit(&huart2, hello, sizeof(hello)/sizeof(hello[0]), 100);
   /* USER CODE END 2 */
@@ -181,14 +197,22 @@ int main(void)
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
+  /* Create the queue(s) */
+  /* definition and creation of requestQueue */
+  osMessageQDef(requestQueue, 1, profile_t);
+  requestQueueHandle = osMessageCreate(osMessageQ(requestQueue), NULL);
+
   /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
-  defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+  /* definition and creation of uxTask */
+  osThreadDef(uxTask, StartUxTask, osPriorityNormal, 0, 512);
+  uxTaskHandle = osThreadCreate(osThread(uxTask), NULL);
+
+  /* definition and creation of profileTask */
+  osThreadDef(profileTask, StartProfileTask, osPriorityAboveNormal, 0, 512);
+  profileTaskHandle = osThreadCreate(osThread(profileTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -198,6 +222,7 @@ int main(void)
   osKernelStart();
 
   /* We should never get here as control is now taken by the scheduler */
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -243,6 +268,32 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief CRC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CRC_Init(void)
+{
+
+  /* USER CODE BEGIN CRC_Init 0 */
+
+  /* USER CODE END CRC_Init 0 */
+
+  /* USER CODE BEGIN CRC_Init 1 */
+
+  /* USER CODE END CRC_Init 1 */
+  hcrc.Instance = CRC;
+  if (HAL_CRC_Init(&hcrc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CRC_Init 2 */
+
+  /* USER CODE END CRC_Init 2 */
+
 }
 
 /**
@@ -452,16 +503,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-//static void TXS_Enable()
-//{
-//	HAL_GPIO_WritePin(TXS_OE_GPIO_Port, TXS_OE_Pin, GPIO_PIN_SET);
-//}
-//
-//static void TXS_Disable()
-//{
-//	HAL_GPIO_WritePin(TXS_OE_GPIO_Port, TXS_OE_Pin, GPIO_PIN_RESET);
-//}
-
 static uint32_t BTN_KeyScan()
 {
 	uint32_t idr, code = 0;
@@ -631,18 +672,9 @@ CliCommandBinding cli_cmd_foo_binding = {
 		CLI_CMD_Foo
 };
 
+/**
 static bool chan_is_empty()
 {
-//	for (int i = 0; i < 4; i++)
-//	{
-//		for (int j = 0; j < 10; j++)
-//		{
-//			if (chan[i][j] != 0)
-//			{
-//				return false;
-//			}
-//		}
-//	}
 	for (int i = 0; i < 4; i++)
 	{
 		if (strcmp(chan[i], "000000000") != 0)
@@ -651,7 +683,7 @@ static bool chan_is_empty()
 		}
 	}
 	return true;
-}
+} */
 
 static void unset_chan()
 {
@@ -761,6 +793,7 @@ CliCommandBinding cli_cmd_set_binding = {
 		CLI_CMD_Set
 };
 
+/*
 static void CLI_CMD_On(EmbeddedCli *cli, char *args, void *context)
 {
 	if (chan_is_empty())
@@ -808,29 +841,7 @@ static void CLI_CMD_On(EmbeddedCli *cli, char *args, void *context)
 	SET_CHAN(chan[3][6], D7);
 	SET_CHAN(chan[3][7], D8);
 	SET_CHAN(chan[3][8], D9);
-}
-
-CliCommandBinding cli_cmd_on_binding = {
-		"on",
-		"Turn on switches",
-		false,
-		NULL,
-		CLI_CMD_On
-};
-
-static void CLI_CMD_Off(EmbeddedCli *cli, char *args, void *context)
-{
-	unset_chan();
-	on_status = false;
-}
-
-CliCommandBinding cli_cmd_off_binding = {
-		"off",
-		"Turn off switches",
-		false,
-		NULL,
-		CLI_CMD_Off
-};
+} */
 
 static void blink_delay(void)
 {
@@ -966,8 +977,6 @@ static void CLI_CMD_Blink(EmbeddedCli *cli, char *args, void *context)
 	SET_CHAN('0', D7); blink_delay();
 	SET_CHAN('0', D8); blink_delay();
 	SET_CHAN('0', D9); blink_delay();
-
-	// unset_chan();
 }
 
 CliCommandBinding cli_cmd_blink_binding = {
@@ -979,14 +988,14 @@ CliCommandBinding cli_cmd_blink_binding = {
 };
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_StartUxTask */
 /**
-  * @brief  Function implementing the defaultTask thread.
+  * @brief  Function implementing the uxTask thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void const * argument)
+/* USER CODE END Header_StartUxTask */
+void StartUxTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
   cli_config = embeddedCliDefaultConfig();
@@ -995,9 +1004,9 @@ void StartDefaultTask(void const * argument)
 
   embeddedCliAddBinding(cli, cli_cmd_foo_binding);
   embeddedCliAddBinding(cli, cli_cmd_set_binding);
-  embeddedCliAddBinding(cli, cli_cmd_on_binding);
-  embeddedCliAddBinding(cli, cli_cmd_off_binding);
   embeddedCliAddBinding(cli, cli_cmd_blink_binding);
+  embeddedCliAddBinding(cli, cli_cmd_list_binding);
+  embeddedCliAddBinding(cli, cli_cmd_define_binding);
 
   /* Infinite loop */
   for(;;)
@@ -1017,6 +1026,8 @@ void StartDefaultTask(void const * argument)
 		HAL_UART_Transmit(&huart2, (uint8_t*)"key:", 4, 10);
 		HAL_UART_Transmit(&huart2, &digit[key], 1, 10);
 		HAL_UART_Transmit(&huart2, (uint8_t*)"\r\n", 2, 10);
+
+		do_profile_by_key(key);
 	}
 
 	// wait 10ms
