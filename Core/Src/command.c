@@ -2,10 +2,10 @@
  * command.c
  *
  *  Created on: Apr 23, 2024
- *      Author: ma
+ *      Author: matianfu@gingerologist.com
  */
 /* Includes ------------------------------------------------------------------*/
-#include <profile.h>
+
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +17,12 @@
 #include "cmsis_os.h"
 #include "command.h"
 #include "main.h"
+#include "profile.h"
+
+/**
+ * TODO https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
+ * https://deepbluembedded.com/how-to-receive-uart-serial-data-with-stm32-dma-interrupt-polling/
+ */
 
 /* Private includes ----------------------------------------------------------*/
 /* Private typedef -----------------------------------------------------------*/
@@ -194,7 +200,11 @@ static void CLI_CMD_Define(EmbeddedCli *cli, char *args, void *context)
 
 CliCommandBinding cli_cmd_define_binding = {
 		"define",
-		"Define a profile",
+		"Define a profile. Example:\r\n"
+		"        > define 9a 222222222 111111111 222222222 111111111 3\r\n"
+		"        > define 9b 111111111 222222222 111111111 222222222 3\r\n"
+		"        > see more detail in manual."
+		,
 		true,
 		NULL,
 		CLI_CMD_Define
@@ -202,7 +212,7 @@ CliCommandBinding cli_cmd_define_binding = {
 
 static void CLI_CMD_Blink(EmbeddedCli *cli, char *args, void *context)
 {
-
+	do_profile_blink();
 }
 
 CliCommandBinding cli_cmd_blink_binding = {
@@ -211,6 +221,19 @@ CliCommandBinding cli_cmd_blink_binding = {
 		false,
 		NULL,
 		CLI_CMD_Blink
+};
+
+static void CLI_CMD_Reboot(EmbeddedCli *cli, char *args, void *context)
+{
+	NVIC_SystemReset();
+}
+
+CliCommandBinding cli_cmd_reboot_binding = {
+		"reboot",
+		"Reboot the processor (for test purpose only).",
+		false,
+		NULL,
+		CLI_CMD_Reboot
 };
 
 void StartUxTask(void const * argument)
@@ -223,6 +246,13 @@ void StartUxTask(void const * argument)
   embeddedCliAddBinding(cli, cli_cmd_blink_binding);
   embeddedCliAddBinding(cli, cli_cmd_list_binding);
   embeddedCliAddBinding(cli, cli_cmd_define_binding);
+  embeddedCliAddBinding(cli, cli_cmd_reboot_binding);
+
+  vTaskDelay(500);
+
+  // generate the first prompt symbol
+  embeddedCliReceiveChar(cli, 8);
+  embeddedCliProcess(cli);
 
   /* Infinite loop */
   for(;;)
@@ -238,11 +268,6 @@ void StartUxTask(void const * argument)
 	int key = detect_single_keydown();
 	if (key >= 0)
 	{
-		const uint8_t digit[] = "0123456789";
-		HAL_UART_Transmit(&huart2, (uint8_t*)"key:", 4, 10);
-		HAL_UART_Transmit(&huart2, &digit[key], 1, 10);
-		HAL_UART_Transmit(&huart2, (uint8_t*)"\r\n", 2, 10);
-
 		do_profile_by_key(key);
 	}
 

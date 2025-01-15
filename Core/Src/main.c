@@ -16,11 +16,8 @@
   ******************************************************************************
   */
 
-/**
- * TODO https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
- * https://deepbluembedded.com/how-to-receive-uart-serial-data-with-stm32-dma-interrupt-polling/
- */
-#include <profile.h>
+
+
 #include <string.h>
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
@@ -30,6 +27,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "command.h"
+#include "profile.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,10 +38,6 @@ typedef enum
 	BTN_DEBOUNCING,
 	BTN_PRESSED,	// waiting for release
 } BTN_StatusTypeDef;
-
-
-
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -53,27 +47,6 @@ typedef enum
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
-// 2 for S
-// 1 for C
-// 0 for floating
-#define SET_CHAN(ccfg, cname)							do {					\
-	if (ccfg == '2')															\
-	{																			\
-		HAL_GPIO_WritePin(cname##C_GPIO_Port, cname##C_Pin, GPIO_PIN_RESET);	\
-		HAL_GPIO_WritePin(cname##S_GPIO_Port, cname##S_Pin, GPIO_PIN_SET);		\
-	}																			\
-	else if (ccfg == '1')														\
-	{																			\
-		HAL_GPIO_WritePin(cname##S_GPIO_Port, cname##S_Pin, GPIO_PIN_RESET);    \
-		HAL_GPIO_WritePin(cname##C_GPIO_Port, cname##C_Pin, GPIO_PIN_SET);	    \
-	}																			\
-	else																		\
-	{																			\
-		HAL_GPIO_WritePin(cname##S_GPIO_Port, cname##S_Pin, GPIO_PIN_RESET);    \
-		HAL_GPIO_WritePin(cname##C_GPIO_Port, cname##C_Pin, GPIO_PIN_RESET);	\
-	} } while (0)
-
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -87,14 +60,10 @@ osThreadId profileTaskHandle;
 osMessageQId requestQueueHandle;
 /* USER CODE BEGIN PV */
 
-uint8_t UART2_rxbuf[12] = {0};
-const uint8_t hello[] = "\r\nhello\r\n> ";
-
 static BTN_StatusTypeDef btn_status = BTN_PRESSED;
 int btn_index = -1;
 int btn_count = 0;
 
-static bool on_status = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -115,6 +84,7 @@ extern void StartProfileTask(void const * argument);
  * Write char to uart in blocking mode
  */
 
+// TODO remove this function
 static void UART2_write(const char * str)
 {
 	int len = strlen(str);
@@ -167,7 +137,6 @@ int main(void)
   MX_USART2_UART_Init();
   MX_CRC_Init();
   /* USER CODE BEGIN 2 */
-  HAL_UART_Transmit(&huart2, hello, sizeof(hello)/sizeof(hello[0]), 100);
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -192,11 +161,11 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of uxTask */
-  osThreadDef(uxTask, StartUxTask, osPriorityNormal, 0, 256);
+  osThreadDef(uxTask, StartUxTask, osPriorityNormal, 0, 1024);
   uxTaskHandle = osThreadCreate(osThread(uxTask), NULL);
 
   /* definition and creation of profileTask */
-  osThreadDef(profileTask, StartProfileTask, osPriorityAboveNormal, 0, 512);
+  osThreadDef(profileTask, StartProfileTask, osPriorityAboveNormal, 0, 1024);
   profileTaskHandle = osThreadCreate(osThread(profileTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -649,192 +618,6 @@ int detect_single_keydown(void)
 	return BTN_SingleKeyDown();
 }
 
-static void unset_chan()
-{
-	SET_CHAN(0, A1);
-	SET_CHAN(0, A2);
-	SET_CHAN(0, A3);
-	SET_CHAN(0, A4);
-	SET_CHAN(0, A5);
-	SET_CHAN(0, A6);
-	SET_CHAN(0, A7);
-	SET_CHAN(0, A8);
-	SET_CHAN(0, A9);
-
-	SET_CHAN(0, B1);
-	SET_CHAN(0, B2);
-	SET_CHAN(0, B3);
-	SET_CHAN(0, B4);
-	SET_CHAN(0, B5);
-	SET_CHAN(0, B6);
-	SET_CHAN(0, B7);
-	SET_CHAN(0, B8);
-	SET_CHAN(0, B9);
-
-	SET_CHAN(0, C1);
-	SET_CHAN(0, C2);
-	SET_CHAN(0, C3);
-	SET_CHAN(0, C4);
-	SET_CHAN(0, C5);
-	SET_CHAN(0, C6);
-	SET_CHAN(0, C7);
-	SET_CHAN(0, C8);
-	SET_CHAN(0, C9);
-
-	SET_CHAN(0, D1);
-	SET_CHAN(0, D2);
-	SET_CHAN(0, D3);
-	SET_CHAN(0, D4);
-	SET_CHAN(0, D5);
-	SET_CHAN(0, D6);
-	SET_CHAN(0, D7);
-	SET_CHAN(0, D8);
-	SET_CHAN(0, D9);
-}
-
-static void blink_delay(void)
-{
-	vTaskDelay(100);
-}
-
-static void CLI_CMD_Blink(EmbeddedCli *cli, char *args, void *context)
-{
-	if (on_status == true)
-	{
-		UART2_write("this command works only when switches are off.");
-		return;
-	}
-
-	unset_chan();
-
-	SET_CHAN('2', A1); blink_delay();
-	SET_CHAN('2', A2); blink_delay();
-	SET_CHAN('2', A3); blink_delay();
-	SET_CHAN('2', A4); blink_delay();
-	SET_CHAN('2', A5); blink_delay();
-	SET_CHAN('2', A6); blink_delay();
-	SET_CHAN('2', A7); blink_delay();
-	SET_CHAN('2', A8); blink_delay();
-	SET_CHAN('2', A9); blink_delay();
-
-	SET_CHAN('2', B1); blink_delay();
-	SET_CHAN('2', B2); blink_delay();
-	SET_CHAN('2', B3); blink_delay();
-	SET_CHAN('2', B4); blink_delay();
-	SET_CHAN('2', B5); blink_delay();
-	SET_CHAN('2', B6); blink_delay();
-	SET_CHAN('2', B7); blink_delay();
-	SET_CHAN('2', B8); blink_delay();
-	SET_CHAN('2', B9); blink_delay();
-
-	SET_CHAN('2', C1); blink_delay();
-	SET_CHAN('2', C2); blink_delay();
-	SET_CHAN('2', C3); blink_delay();
-	SET_CHAN('2', C4); blink_delay();
-	SET_CHAN('2', C5); blink_delay();
-	SET_CHAN('2', C6); blink_delay();
-	SET_CHAN('2', C7); blink_delay();
-	SET_CHAN('2', C8); blink_delay();
-	SET_CHAN('2', C9); blink_delay();
-
-	SET_CHAN('2', D1); blink_delay();
-	SET_CHAN('2', D2); blink_delay();
-	SET_CHAN('2', D3); blink_delay();
-	SET_CHAN('2', D4); blink_delay();
-	SET_CHAN('2', D5); blink_delay();
-	SET_CHAN('2', D6); blink_delay();
-	SET_CHAN('2', D7); blink_delay();
-	SET_CHAN('2', D8); blink_delay();
-	SET_CHAN('2', D9); blink_delay();
-
-	SET_CHAN('1', A1); blink_delay();
-	SET_CHAN('1', A2); blink_delay();
-	SET_CHAN('1', A3); blink_delay();
-	SET_CHAN('1', A4); blink_delay();
-	SET_CHAN('1', A5); blink_delay();
-	SET_CHAN('1', A6); blink_delay();
-	SET_CHAN('1', A7); blink_delay();
-	SET_CHAN('1', A8); blink_delay();
-	SET_CHAN('1', A9); blink_delay();
-
-	SET_CHAN('1', B1); blink_delay();
-	SET_CHAN('1', B2); blink_delay();
-	SET_CHAN('1', B3); blink_delay();
-	SET_CHAN('1', B4); blink_delay();
-	SET_CHAN('1', B5); blink_delay();
-	SET_CHAN('1', B6); blink_delay();
-	SET_CHAN('1', B7); blink_delay();
-	SET_CHAN('1', B8); blink_delay();
-	SET_CHAN('1', B9); blink_delay();
-
-	SET_CHAN('1', C1); blink_delay();
-	SET_CHAN('1', C2); blink_delay();
-	SET_CHAN('1', C3); blink_delay();
-	SET_CHAN('1', C4); blink_delay();
-	SET_CHAN('1', C5); blink_delay();
-	SET_CHAN('1', C6); blink_delay();
-	SET_CHAN('1', C7); blink_delay();
-	SET_CHAN('1', C8); blink_delay();
-	SET_CHAN('1', C9); blink_delay();
-
-	SET_CHAN('1', D1); blink_delay();
-	SET_CHAN('1', D2); blink_delay();
-	SET_CHAN('1', D3); blink_delay();
-	SET_CHAN('1', D4); blink_delay();
-	SET_CHAN('1', D5); blink_delay();
-	SET_CHAN('1', D6); blink_delay();
-	SET_CHAN('1', D7); blink_delay();
-	SET_CHAN('1', D8); blink_delay();
-	SET_CHAN('1', D9); blink_delay();
-
-	SET_CHAN('0', A1); blink_delay();
-	SET_CHAN('0', A2); blink_delay();
-	SET_CHAN('0', A3); blink_delay();
-	SET_CHAN('0', A4); blink_delay();
-	SET_CHAN('0', A5); blink_delay();
-	SET_CHAN('0', A6); blink_delay();
-	SET_CHAN('0', A7); blink_delay();
-	SET_CHAN('0', A8); blink_delay();
-	SET_CHAN('0', A9); blink_delay();
-
-	SET_CHAN('0', B1); blink_delay();
-	SET_CHAN('0', B2); blink_delay();
-	SET_CHAN('0', B3); blink_delay();
-	SET_CHAN('0', B4); blink_delay();
-	SET_CHAN('0', B5); blink_delay();
-	SET_CHAN('0', B6); blink_delay();
-	SET_CHAN('0', B7); blink_delay();
-	SET_CHAN('0', B8); blink_delay();
-	SET_CHAN('0', B9); blink_delay();
-
-	SET_CHAN('0', C1); blink_delay();
-	SET_CHAN('0', C2); blink_delay();
-	SET_CHAN('0', C3); blink_delay();
-	SET_CHAN('0', C4); blink_delay();
-	SET_CHAN('0', C5); blink_delay();
-	SET_CHAN('0', C6); blink_delay();
-	SET_CHAN('0', C7); blink_delay();
-	SET_CHAN('0', C8); blink_delay();
-	SET_CHAN('0', C9); blink_delay();
-
-	SET_CHAN('0', D1); blink_delay();
-	SET_CHAN('0', D2); blink_delay();
-	SET_CHAN('0', D3); blink_delay();
-	SET_CHAN('0', D4); blink_delay();
-	SET_CHAN('0', D5); blink_delay();
-	SET_CHAN('0', D6); blink_delay();
-	SET_CHAN('0', D7); blink_delay();
-	SET_CHAN('0', D8); blink_delay();
-	SET_CHAN('0', D9); blink_delay();
-}
-
-//CliCommandBinding cli_cmd_blink_binding = {
-//		"blink",
-//		"Switch on/off all ports (without simultaneous signal/common on, for test only)",
-//		false,
-//		NULL,
-//		CLI_CMD_Blink
-//};
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartUxTask */
@@ -847,39 +630,6 @@ static void CLI_CMD_Blink(EmbeddedCli *cli, char *args, void *context)
 __weak void StartUxTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
-  /*
-  cli_config = embeddedCliDefaultConfig();
-  cli = embeddedCliNew(cli_config);
-  cli -> writeChar = cli_writeChar;
-
-  embeddedCliAddBinding(cli, cli_cmd_blink_binding);
-  embeddedCliAddBinding(cli, cli_cmd_list_binding);
-  embeddedCliAddBinding(cli, cli_cmd_define_binding);
-
-  for(;;)
-  {
-	uint8_t c;
-	HAL_StatusTypeDef status = HAL_UART_Receive(&huart2, &c, 1, 10);
-	if (status == HAL_OK)
-	{
-	  embeddedCliReceiveChar(cli, c);
-	  embeddedCliProcess(cli);
-	}
-
-	int key = BTN_SingleKeyDown();
-	if (key >= 0)
-	{
-		const uint8_t digit[] = "0123456789";
-		HAL_UART_Transmit(&huart2, (uint8_t*)"key:", 4, 10);
-		HAL_UART_Transmit(&huart2, &digit[key], 1, 10);
-		HAL_UART_Transmit(&huart2, (uint8_t*)"\r\n", 2, 10);
-
-		do_profile_by_key(key);
-	}
-
-	// wait 10ms
-	vTaskDelay(10);
-  } */
   /* USER CODE END 5 */
 }
 

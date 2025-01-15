@@ -57,7 +57,6 @@ void Error_Handler(void);
 void print_line(const char* str);
 void update_switch(int port_index, int pin_index, GPIO_PinState c_state, GPIO_PinState s_state);
 void update_all_switches(uint32_t config[4]);
-void do_profile_by_key(int profile_index);
 int detect_single_keydown(void);
 /* USER CODE END EFP */
 

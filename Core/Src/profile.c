@@ -4,11 +4,11 @@
  *  Created on: Apr 23, 2024
  *      Author: ma
  */
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
-
-// #include "stm32f1xx_hal_crc.h"
-// #include "FreeRTOS.h"
-// #include "queue.h"
+#include <string.h>
 
 #include "cmsis_os.h"
 #include "main.h"
@@ -22,16 +22,13 @@ typedef struct {
 	char buf[10];
 } pgcfg_strbuf_t;
 
-typedef struct __attribute__((packed)) persistent_profiles {
-	profile_t profile[9];	// 10 * 9 = 90 words
-	uint32_t magic;			// deadbeef
-	uint32_t crc;
-} persistent_profiles_t;
-
-static_assert(sizeof(persistent_profiles_t) == 368, "persistent_profiles_t size not 368");
-
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
+// see profile initializer below
+#define STOP_PROFILE						profile[9]
+#define DDBF_PROFILE						profile[10]
+#define CURR_PROFILE						profile[11]
+#define NEXT_PROFILE						profile[12]
 
 /* Private variables ---------------------------------------------------------*/
 static GPIO_TypeDef* s_port[4][9] =
@@ -67,7 +64,26 @@ static const uint16_t c_pin[4][9] =
 };
 
 static char long_buf[256] = {0};
-static profile_t profile[12] = {0};	// 9 current, 10, next, 11 empty
+
+/**
+ * 0-8 		9 profiles
+ * 9		all zero (used for stop)
+ * 10		all deadbeef (used for blink)
+ * 11		current
+ * 12 		next
+ */
+static profile_t profile[13] = {
+		{}, {}, {},
+		{}, {}, {},
+		{}, {}, {},
+		{}, // profile[9]
+		{	// profile[10]
+			.pgcfg_a = { 0xdeadbeef, 0xdeadbeef, 0xdeadbeef, 0xdeadbeef },
+			.pgcfg_b = { 0xdeadbeef, 0xdeadbeef, 0xdeadbeef, 0xdeadbeef },
+			.duration_a_sec = 0xdeadbeef,
+			.duration_b_sec = 0xdeadbeef
+		},
+		{}, {}};	// profile[11], profile[12]
 
 extern CRC_HandleTypeDef hcrc;
 
@@ -225,24 +241,43 @@ void update_all_switches(uint32_t pg_cfg[4])
 
 void do_profile_by_key(int key)
 {
+	static bool non_zero_key_ever_pressed = false;
+
+	snprintf(long_buf, 256, "key %u pressed", key);
+	print_line(long_buf);
+
 	if (key == 0)
 	{
-		if (pdTRUE != xQueueSend(requestQueueHandle, &profile[9], 0))
+		if (non_zero_key_ever_pressed)
 		{
-			print_line("queue full");
+			if (pdTRUE != xQueueSend(requestQueueHandle, &STOP_PROFILE, 0))
+			{
+				print_line("error: queue full");
+			}
+		}
+		else
+		{
+			if (pdTRUE != xQueueSend(requestQueueHandle, &DDBF_PROFILE, 0))
+			{
+				print_line("error: queue full");
+			}
 		}
 	}
 	else if (key > 0 && key < 10)
 	{
+		non_zero_key_ever_pressed = true;
 		if (pdTRUE != xQueueSend(requestQueueHandle, &profile[key - 1], 0))
 		{
-			print_line("queue full");
+			print_line("error: queue full");
 		}
 	}
 }
 
-#define CURR_PROFILE						profile[10]
-#define NEXT_PROFILE						profile[11]
+void do_profile_blink()
+{
+	xQueueSend(requestQueueHandle, &profile[10], 0);
+}
+
 
 void StartProfileTask(void const * argument)
 {
@@ -252,6 +287,11 @@ void StartProfileTask(void const * argument)
 
 entry_point:
 	CURR_PROFILE = NEXT_PROFILE;
+
+	if (CURR_PROFILE.pgcfg_a[0] == 0xdeadbeef)
+	{
+		goto profile_blink;
+	}
 
 	for (;;)
 	{
@@ -276,7 +316,7 @@ entry_point:
 		}
 	}
 
-blink:
+profile_blink:
 	for (int port = 0; port < 4; port++)
 	{
 		for (int pin = 0; pin < 9; pin++)
@@ -290,7 +330,11 @@ blink:
 		for (int pin = 0; pin < 9; pin++)
 		{
 			update_switch(port, pin, GPIO_PIN_RESET, GPIO_PIN_SET);
-			vTaskDelay(100);
+			// vTaskDelay(100);
+			if (pdTRUE == xQueueReceive(requestQueueHandle, &NEXT_PROFILE, 100))
+			{
+				goto entry_point;
+			}
 		}
 	}
 
@@ -299,7 +343,11 @@ blink:
 		for (int pin = 0; pin < 9; pin++)
 		{
 			update_switch(port, pin, GPIO_PIN_SET, GPIO_PIN_RESET);
-			vTaskDelay(100);
+			// vTaskDelay(100);
+			if (pdTRUE == xQueueReceive(requestQueueHandle, &NEXT_PROFILE, 100))
+			{
+				goto entry_point;
+			}
 		}
 	}
 
@@ -308,123 +356,16 @@ blink:
 		for (int pin = 0; pin < 9; pin++)
 		{
 			update_switch(port, pin, GPIO_PIN_RESET, GPIO_PIN_RESET);
-			vTaskDelay(100);
+			// vTaskDelay(100);
+			if (pdTRUE == xQueueReceive(requestQueueHandle, &NEXT_PROFILE, 100))
+			{
+				goto entry_point;
+			}
 		}
 	}
 
-/*
-
-
-	SET_CHAN('2', B1); blink_delay();
-	SET_CHAN('2', B2); blink_delay();
-	SET_CHAN('2', B3); blink_delay();
-	SET_CHAN('2', B4); blink_delay();
-	SET_CHAN('2', B5); blink_delay();
-	SET_CHAN('2', B6); blink_delay();
-	SET_CHAN('2', B7); blink_delay();
-	SET_CHAN('2', B8); blink_delay();
-	SET_CHAN('2', B9); blink_delay();
-
-	SET_CHAN('2', C1); blink_delay();
-	SET_CHAN('2', C2); blink_delay();
-	SET_CHAN('2', C3); blink_delay();
-	SET_CHAN('2', C4); blink_delay();
-	SET_CHAN('2', C5); blink_delay();
-	SET_CHAN('2', C6); blink_delay();
-	SET_CHAN('2', C7); blink_delay();
-	SET_CHAN('2', C8); blink_delay();
-	SET_CHAN('2', C9); blink_delay();
-
-	SET_CHAN('2', D1); blink_delay();
-	SET_CHAN('2', D2); blink_delay();
-	SET_CHAN('2', D3); blink_delay();
-	SET_CHAN('2', D4); blink_delay();
-	SET_CHAN('2', D5); blink_delay();
-	SET_CHAN('2', D6); blink_delay();
-	SET_CHAN('2', D7); blink_delay();
-	SET_CHAN('2', D8); blink_delay();
-	SET_CHAN('2', D9); blink_delay();
-
-	SET_CHAN('1', A1); blink_delay();
-	SET_CHAN('1', A2); blink_delay();
-	SET_CHAN('1', A3); blink_delay();
-	SET_CHAN('1', A4); blink_delay();
-	SET_CHAN('1', A5); blink_delay();
-	SET_CHAN('1', A6); blink_delay();
-	SET_CHAN('1', A7); blink_delay();
-	SET_CHAN('1', A8); blink_delay();
-	SET_CHAN('1', A9); blink_delay();
-
-	SET_CHAN('1', B1); blink_delay();
-	SET_CHAN('1', B2); blink_delay();
-	SET_CHAN('1', B3); blink_delay();
-	SET_CHAN('1', B4); blink_delay();
-	SET_CHAN('1', B5); blink_delay();
-	SET_CHAN('1', B6); blink_delay();
-	SET_CHAN('1', B7); blink_delay();
-	SET_CHAN('1', B8); blink_delay();
-	SET_CHAN('1', B9); blink_delay();
-
-	SET_CHAN('1', C1); blink_delay();
-	SET_CHAN('1', C2); blink_delay();
-	SET_CHAN('1', C3); blink_delay();
-	SET_CHAN('1', C4); blink_delay();
-	SET_CHAN('1', C5); blink_delay();
-	SET_CHAN('1', C6); blink_delay();
-	SET_CHAN('1', C7); blink_delay();
-	SET_CHAN('1', C8); blink_delay();
-	SET_CHAN('1', C9); blink_delay();
-
-	SET_CHAN('1', D1); blink_delay();
-	SET_CHAN('1', D2); blink_delay();
-	SET_CHAN('1', D3); blink_delay();
-	SET_CHAN('1', D4); blink_delay();
-	SET_CHAN('1', D5); blink_delay();
-	SET_CHAN('1', D6); blink_delay();
-	SET_CHAN('1', D7); blink_delay();
-	SET_CHAN('1', D8); blink_delay();
-	SET_CHAN('1', D9); blink_delay();
-
-	SET_CHAN('0', A1); blink_delay();
-	SET_CHAN('0', A2); blink_delay();
-	SET_CHAN('0', A3); blink_delay();
-	SET_CHAN('0', A4); blink_delay();
-	SET_CHAN('0', A5); blink_delay();
-	SET_CHAN('0', A6); blink_delay();
-	SET_CHAN('0', A7); blink_delay();
-	SET_CHAN('0', A8); blink_delay();
-	SET_CHAN('0', A9); blink_delay();
-
-	SET_CHAN('0', B1); blink_delay();
-	SET_CHAN('0', B2); blink_delay();
-	SET_CHAN('0', B3); blink_delay();
-	SET_CHAN('0', B4); blink_delay();
-	SET_CHAN('0', B5); blink_delay();
-	SET_CHAN('0', B6); blink_delay();
-	SET_CHAN('0', B7); blink_delay();
-	SET_CHAN('0', B8); blink_delay();
-	SET_CHAN('0', B9); blink_delay();
-
-	SET_CHAN('0', C1); blink_delay();
-	SET_CHAN('0', C2); blink_delay();
-	SET_CHAN('0', C3); blink_delay();
-	SET_CHAN('0', C4); blink_delay();
-	SET_CHAN('0', C5); blink_delay();
-	SET_CHAN('0', C6); blink_delay();
-	SET_CHAN('0', C7); blink_delay();
-	SET_CHAN('0', C8); blink_delay();
-	SET_CHAN('0', C9); blink_delay();
-
-	SET_CHAN('0', D1); blink_delay();
-	SET_CHAN('0', D2); blink_delay();
-	SET_CHAN('0', D3); blink_delay();
-	SET_CHAN('0', D4); blink_delay();
-	SET_CHAN('0', D5); blink_delay();
-	SET_CHAN('0', D6); blink_delay();
-	SET_CHAN('0', D7); blink_delay();
-	SET_CHAN('0', D8); blink_delay();
-	SET_CHAN('0', D9); blink_delay();
- * */
+	NEXT_PROFILE = STOP_PROFILE;
+	goto entry_point;
 }
 
 // page size 2KB, table 29 flash memory characteristics, in datasheet (stm32f103ze.pdf)
@@ -438,7 +379,6 @@ blink:
 #define FLASH_SIZE				0x080000		// 512KB
 #define FLASH_ADDR_BASE			0x08000000
 #define LAST_PAGE_ADDR 			(FLASH_ADDR_BASE + FLASH_SIZE - FLASH_PAGE_SIZE)
-
 
 static void delay(void)
 {

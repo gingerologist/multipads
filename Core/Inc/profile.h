@@ -14,8 +14,8 @@
 typedef struct {
 	uint32_t pgcfg_a[4];
 	uint32_t pgcfg_b[4];
-	uint32_t duration_a_sec;	// only meaningful when mode is 2
-	uint32_t duration_b_sec;	// only meaningful when mode is 2
+	uint32_t duration_a_sec;
+	uint32_t duration_b_sec;
 } profile_t;
 
 // suppress the IDE syntax error (yellow mark) by
@@ -27,6 +27,8 @@ typedef struct {
 static_assert(sizeof(profile_t) == 40, "profile_t size not 40");
 
 void print_profile(int index);
+void do_profile_by_key(int profile_index);
+void do_profile_blink(void);
 profile_t get_profile(int index);
 void set_profile(int index,
 				uint32_t pgcfg_a[4],
